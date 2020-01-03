@@ -1,7 +1,7 @@
 @echo off
-set codebase="C:/Users/Andrew/Documents/Work"
-set bin="C:\Program Files\Java\jdk1.8.0_162\bin"
-rem set codebase="J:/PROV/TECHNOLOGY MANAGEMENT/Application Development/VERS"
-rem set bin="C:\Program Files\Java\jdk1.8.0_144\bin"
-set versclasspath=%codebase%/VERSCode/V2Signer/dist/*
-%bin%\java -classpath %versclasspath% veosigner.VEOSigner %*
+if exist "J:/PROV/TECHNOLOGY MANAGEMENT/Application Development/VERS/VERSCode" (
+	set code="J:/PROV/TECHNOLOGY MANAGEMENT/Application Development/VERS/VERSCode"
+) else (
+	set code="C:/Users/Andrew/Documents/Work/VERSCode"
+)
+java -classpath %code%/V2Signer/dist/* V2Signer.V2Signer %*
