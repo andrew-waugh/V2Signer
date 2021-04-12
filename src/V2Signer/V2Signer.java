@@ -5,6 +5,21 @@
  */
 package V2Signer;
 
+import VEOGenerator.VEOGenerator;
+import VERSCommon.PFXUser;
+import VERSCommon.VEOError;
+import VERSCommon.VEOFatal;
+import java.io.BufferedInputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.IOException;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.TimeZone;
+
 /**
  * *************************************************************
  *
@@ -16,10 +31,6 @@ package V2Signer;
  *
  *************************************************************
  */
-import java.io.*;
-import java.security.*;
-import VEOGenerator.*;
-
 /**
  * This class wraps the VEOGenerator class to create a tool that can produce a
  * signed VEO to compare with one from a vendor.
@@ -41,6 +52,22 @@ public class V2Signer {
     String passwd;	// password for the PFX file
     String signedObj; // signed object to construct VEO
     File outputDir;	// directory in which to place the VEOs
+    boolean help;           // true if printing a cheat list of command line options
+
+    private static final String USAGE = "veoSigner [-h <hashAlg>] -s <pfxFile> <password> [-o <outputDir>] [-v] signedObject";
+
+    /**
+     * Report on version...
+     *
+     * <pre>
+     * 2006     1.0 Created
+     * 20190909 1.1 Added support for hash algorithms other than SHA-1
+     * 20210409 2.0 Added version, and standardised reporting in run. Integrated with VERSCommon (PFXUser, VEOFatal, VEOError)
+     * </pre>
+     */
+    static String version() {
+        return ("2.00");
+    }
 
     /**
      * Default constructor. This constructor processes the command line
@@ -49,8 +76,11 @@ public class V2Signer {
      * error message will be printed and the program will terminate.
      *
      * @param args command line arguments
+     * @throws VERSCommon.VEOFatal if the signer cannot be instantiated
      */
-    public V2Signer(String args[]) {
+    public V2Signer(String args[]) throws VEOFatal {
+        SimpleDateFormat sdf;
+        TimeZone tz;
         StringBuffer sb;
         int c;
         char ch;
@@ -60,10 +90,51 @@ public class V2Signer {
         passwd = null;
         outputDir = null;
         signedObj = null;
-        hashAlg = "SHA1";
+        hashAlg = "SHA256";
+        help = false;
 
         // process command line arguments
         configure(args);
+
+        // tell what is happening
+        System.out.println("******************************************************************************");
+        System.out.println("*                                                                            *");
+        System.out.println("*                V E O ( V 2 )   R E S I G N I N G   T O O L                 *");
+        System.out.println("*                                                                            *");
+        System.out.println("*                                Version " + version() + "                                *");
+        System.out.println("*               Copyright 2006 Public Record Office Victoria                 *");
+        System.out.println("*                                                                            *");
+        System.out.println("******************************************************************************");
+        System.out.println("");
+        System.out.print("Run at ");
+        tz = TimeZone.getTimeZone("GMT+10:00");
+        sdf = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss+10:00");
+        sdf.setTimeZone(tz);
+        System.out.println(sdf.format(new Date()));
+        System.out.println("");
+        if (help) {
+            // veoSigner [-h <hashAlg>] -s <pfxFile> [-p <password>] [-o <outputDir>] [-v] signedObject
+            System.out.println("Command line arguments:");
+            System.out.println(" Mandatory:");
+            System.out.println("  <signedObject>: text file containing the vers:SignedObject element");
+            System.out.println("  -s <pfxFile> <password>: path to a PFX file and its password for signing a VEO (can be repeated)");
+            System.out.println("");
+            System.out.println(" Optional:");
+            System.out.println("  -h <hashAlgorithm>: specifies the hash algorithm (default SHA-256)");
+            System.out.println("  -o <directory>: the directory in which the VEOs are created (default is current working directory)");
+            System.out.println("");
+            System.out.println("  -v: verbose mode: give more details about processing");
+            System.out.println("  -help: print this listing");
+            System.out.println("");
+        }
+
+        // check to see that user specified a PFXfile and a signed object
+        if (pfxFile == null) {
+            throw new VEOFatal("V2Singer()", 1, "No PFX file specified. Usage: " + USAGE);
+        }
+        if (signedObj == null) {
+            throw new VEOFatal("V2Singer()", 1, "No text (.txt) file specified containing the vers:SignedObject element. Usage: " + USAGE);
+        }
 
         // if a password for the pfx file has not been supplied, ask for it...
         if (passwd == null) {
@@ -84,12 +155,21 @@ public class V2Signer {
             passwd = sb.toString();
         }
 
+        System.out.println("Configuration:");
+        System.out.println(" PFX file: '" + pfxFile.toString() + "'");
+        if (outputDir != null) {
+            System.out.println(" Output directory: '" + outputDir.toString() + "'");
+        }
+        System.out.println(" Hash algorithm: " + hashAlg);
+        if (verbose) {
+            System.out.println(" Verbose output is selected");
+        }
+
         // open pfx file
         try {
             signer = new PFXUser(pfxFile.getPath(), passwd);
         } catch (VEOError e) {
-            System.err.println(e.getMessage());
-            System.exit(-1);
+            throw new VEOFatal(e.getMessage());
         }
     }
 
@@ -102,27 +182,28 @@ public class V2Signer {
      *
      * @param args[] the command line arguments
      */
-    private void configure(String args[]) {
+    private void configure(String args[]) throws VEOFatal {
         int i;
-        String usage = "veoSigner [-h <hashAlg>] -s <pfxFile> [-p <password>] [-o <outputDir>] [-v] signedObject";
 
         // process command line arguments
         i = 0;
         try {
             while (i < args.length) {
 
-            	// get password
-		if (args[i].toLowerCase().equals("-h")) {
-			i++;
-			hashAlg = args[i];
-			i++;
-			continue;
-		}
-                
+                // get password
+                if (args[i].toLowerCase().equals("-h")) {
+                    i++;
+                    hashAlg = args[i];
+                    i++;
+                    continue;
+                }
+
                 // get pfx file
                 if (args[i].toLowerCase().equals("-s")) {
                     i++;
                     pfxFile = openFile("PFX file", args[i], false);
+                    i++;
+                    passwd = args[i];
                     i++;
                     continue;
                 }
@@ -135,10 +216,9 @@ public class V2Signer {
                     continue;
                 }
 
-                // get password
-                if (args[i].toLowerCase().equals("-p")) {
-                    i++;
-                    passwd = args[i];
+                // help requested
+                if (args[i].toLowerCase().equals("-help")) {
+                    help = true;
                     i++;
                     continue;
                 }
@@ -160,26 +240,10 @@ public class V2Signer {
                 }
 
                 // if unrecognised arguement, print help string and exit
-                System.err.println("Unrecognised argument '" + args[i] + "'");
-                System.err.println(usage);
-                System.exit(-1);
+                throw new VEOFatal("V2Singer()", 1, "Unrecognised argument '" + args[i] + "' Usage: " + USAGE);
             }
         } catch (ArrayIndexOutOfBoundsException ae) {
-            System.err.println("Missing argument. Usage: ");
-            System.err.println(usage);
-            System.exit(-1);
-        }
-
-        // check to see that user specified a PFXfile and a signed object
-        if (pfxFile == null) {
-            System.err.println("No PFX file specified");
-            System.err.println(usage);
-            System.exit(-1);
-        }
-        if (signedObj == null) {
-            System.err.println("No signed object file specified");
-            System.err.println(usage);
-            System.exit(-1);
+            throw new VEOFatal("V2Singer()", 2, "Missing argument. Usage: " + USAGE);
         }
     }
 
@@ -194,7 +258,7 @@ public class V2Signer {
      * @param isDirectory true if the file is supposed to be a directory
      * @return the File opened
      */
-    private File openFile(String type, String name, boolean isDirectory) {
+    private File openFile(String type, String name, boolean isDirectory) throws VEOFatal {
         String s;
         File f;
 
@@ -203,28 +267,20 @@ public class V2Signer {
         try {
             f = new File(name);
             s = f.getCanonicalPath();
-        } catch (NullPointerException npe) {
-            System.err.println(type + " argument is null");
-            System.exit(-1);
-        } catch (IOException ioe) {
-            System.err.println("Error when accessing " + type + ": " + ioe.getMessage());
-            System.exit(-1);
+        } catch (NullPointerException | IOException e) {
+            throw new VEOFatal("Error when accessing " + type + ": " + e.getMessage());
         }
         if (s == null) {
-            System.err.println("PANIC! VEOSigner.openFile(" + type + ", " + name + ", " + isDirectory + "): File is null");
-            System.exit(-1);
+            throw new VEOFatal("PANIC! VEOSigner.openFile(" + type + ", " + name + ", " + isDirectory + "): File is null");
         }
         if (!f.exists()) {
-            System.err.println(type + " '" + s + "' does not exist");
-            System.exit(-1);
+            throw new VEOFatal(type + " '" + s + "' does not exist");
         }
         if (isDirectory && !f.isDirectory()) {
-            System.err.println(type + " '" + s + "' is a file not a directory");
-            System.exit(-1);
+            throw new VEOFatal(type + " '" + s + "' is a file not a directory");
         }
         if (!isDirectory && f.isDirectory()) {
-            System.err.println(type + " '" + s + "' is a directory not a file");
-            System.exit(-1);
+            throw new VEOFatal(type + " '" + s + "' is a directory not a file");
         }
         if (verbose) {
             System.err.println(type + ": '" + s + "'");
@@ -235,22 +291,23 @@ public class V2Signer {
     /**
      * Build the VEOs. This method processes the data file, building VEOs from
      * the data and the templates.
+     *
+     * @throws VERSCommon.VEOFatal if an error occurred that meant no further
+     * processing is possible
      */
-    public void buildVEOs() {
-        String name = "VEOSigner.buildVEOs(): ";
+    public void buildVEOs() throws VEOFatal {
+        String name = "VEOSigner.buildVEOs()";
         File f;
         File veo;
         FileInputStream fis;
         BufferedInputStream bis;
 
-        f = openFile("Signed object", signedObj, false);
         fis = null;
         try {
+            f = openFile("Signed object", signedObj, false);
             fis = new FileInputStream(f);
-        } catch (FileNotFoundException fnfe) {
-            fnfe.printStackTrace();
-            System.err.println(name + "Signed object file not found");
-            System.exit(-1);
+        } catch (FileNotFoundException | VEOFatal e) {
+            throw new VEOFatal(name, 1, "Signed object cannot be opened:" + e.getMessage());
         }
         bis = new BufferedInputStream(fis);
 
@@ -271,9 +328,7 @@ public class V2Signer {
             // end VEO
             vg.endVEO();
         } catch (VEOError ve) {
-            ve.printStackTrace();
-            System.err.println(name + "Error in constructing VEO (" + ve.getMessage() + ")");
-            System.exit(-1);
+            throw new VEOFatal(name, 2, "Error in constructing VEO (" + ve.getMessage() + ")");
         }
 
         try {
@@ -288,18 +343,33 @@ public class V2Signer {
         byte[] h;
         int i;
         char[] charbuf = {'0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C', 'D', 'E', 'F'};
+        String s;
 
         fis = null;
         try {
             fis = new FileInputStream(f);
         } catch (FileNotFoundException fnfe) {
-            fnfe.printStackTrace();
-            System.err.println(name + "Signed object file not found");
-            System.exit(-1);
+            throw new VEOFatal(name, 3, "Signed object file not found");
         }
         bis = new BufferedInputStream(fis);
+        switch (hashAlg) {
+            case "SHA1":
+                s = "SHA-1";
+                break;
+            case "SHA256":
+                s = "SHA-256";
+                break;
+            case "SHA384":
+                s = "SHA-384";
+                break;
+            case "SHA512":
+                s = "SHA-512";
+                break;
+            default:
+                throw new VEOFatal(name, 4, "Unknown hash algorithm: '" + hashAlg + "'");
+        }
         try {
-            md = MessageDigest.getInstance("SHA1");
+            md = MessageDigest.getInstance(s);
             bin = new byte[1];
             while (bis.read(bin) != -1) {
                 if (bin[0] == 0x20 || bin[0] == 0x0D || bin[0] == 0x0A || bin[0] == 0x09) {
@@ -316,11 +386,9 @@ public class V2Signer {
             System.out.println("");
 
         } catch (NoSuchAlgorithmException nsae) {
-            System.err.println(name + "Security package doesn't support SHA1");
-            System.exit(-1);
+            throw new VEOFatal(name, 3, "Hash algorithm '" + s + "' is not supported");
         } catch (IOException ioe) {
-            System.err.println(name + "Error reading input file: " + ioe.getMessage());
-            System.exit(-1);
+            throw new VEOFatal(name, 4, "Error reading input file: " + ioe.getMessage());
         }
         try {
             bis.close();
@@ -336,9 +404,14 @@ public class V2Signer {
      * @param args command line arguments
      */
     public static void main(String args[]) {
-        V2Signer vs = new V2Signer(args);
+        V2Signer vs;
 
         // process datafile
-        vs.buildVEOs();
+        try {
+            vs = new V2Signer(args);
+            vs.buildVEOs();
+        } catch (VEOFatal e) {
+            System.err.println(e.toString());
+        }
     }
 }
