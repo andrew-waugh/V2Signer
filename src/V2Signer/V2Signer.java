@@ -63,10 +63,11 @@ public class V2Signer {
      * 2006     1.0 Created
      * 20190909 1.1 Added support for hash algorithms other than SHA-1
      * 20210409 2.0 Added version, and standardised reporting in run. Integrated with VERSCommon (PFXUser, VEOFatal, VEOError)
+     * 20210709 2.1 Added PISA support in BAT
      * </pre>
      */
     static String version() {
-        return ("2.00");
+        return ("2.1");
     }
 
     /**
