@@ -60,14 +60,15 @@ public class V2Signer {
      * Report on version...
      *
      * <pre>
-     * 2006     1.0 Created
-     * 20190909 1.1 Added support for hash algorithms other than SHA-1
-     * 20210409 2.0 Added version, and standardised reporting in run. Integrated with VERSCommon (PFXUser, VEOFatal, VEOError)
-     * 20210709 2.1 Added PISA support in BAT
+     * 2006     1.00 Created
+     * 20190909 1.01 Added support for hash algorithms other than SHA-1
+     * 20210409 2.00 Added version, and standardised reporting in run. Integrated with VERSCommon (PFXUser, VEOFatal, VEOError)
+     * 20210709 2.01 Added PISA support in BAT
+     * 20231214 2.02 Updated to use new version of VEOFatal
      * </pre>
      */
     static String version() {
-        return ("2.1");
+        return ("2.02");
     }
 
     /**
@@ -131,10 +132,10 @@ public class V2Signer {
 
         // check to see that user specified a PFXfile and a signed object
         if (pfxFile == null) {
-            throw new VEOFatal("V2Singer()", 1, "No PFX file specified. Usage: " + USAGE);
+            throw new VEOFatal("V2Signer()", 1, "No PFX file specified. Usage: " + USAGE);
         }
         if (signedObj == null) {
-            throw new VEOFatal("V2Singer()", 1, "No text (.txt) file specified containing the vers:SignedObject element. Usage: " + USAGE);
+            throw new VEOFatal("V2Signer()", 1, "No text (.txt) file specified containing the vers:SignedObject element. Usage: " + USAGE);
         }
 
         // if a password for the pfx file has not been supplied, ask for it...
@@ -170,7 +171,7 @@ public class V2Signer {
         try {
             signer = new PFXUser(pfxFile.getPath(), passwd);
         } catch (VEOError e) {
-            throw new VEOFatal(e.getMessage());
+            throw new VEOFatal("V2Signer", 1, e.getMessage());
         }
     }
 
@@ -241,10 +242,10 @@ public class V2Signer {
                 }
 
                 // if unrecognised arguement, print help string and exit
-                throw new VEOFatal("V2Singer()", 1, "Unrecognised argument '" + args[i] + "' Usage: " + USAGE);
+                throw new VEOFatal("V2Signer()", 1, "Unrecognised argument '" + args[i] + "' Usage: " + USAGE);
             }
         } catch (ArrayIndexOutOfBoundsException ae) {
-            throw new VEOFatal("V2Singer()", 2, "Missing argument. Usage: " + USAGE);
+            throw new VEOFatal("V2Signer()", 2, "Missing argument. Usage: " + USAGE);
         }
     }
 
@@ -269,19 +270,19 @@ public class V2Signer {
             f = new File(name);
             s = f.getCanonicalPath();
         } catch (NullPointerException | IOException e) {
-            throw new VEOFatal("Error when accessing " + type + ": " + e.getMessage());
+            throw new VEOFatal("V2Signer", "openFile", 1, "Error when accessing " + type + ": " + e.getMessage());
         }
         if (s == null) {
-            throw new VEOFatal("PANIC! VEOSigner.openFile(" + type + ", " + name + ", " + isDirectory + "): File is null");
+            throw new VEOFatal("V2Signer", "openFile", 2, "PANIC! VEOSigner.openFile(" + type + ", " + name + ", " + isDirectory + "): File is null");
         }
         if (!f.exists()) {
-            throw new VEOFatal(type + " '" + s + "' does not exist");
+            throw new VEOFatal("V2Signer", "openFile", 3, type + " '" + s + "' does not exist");
         }
         if (isDirectory && !f.isDirectory()) {
-            throw new VEOFatal(type + " '" + s + "' is a file not a directory");
+            throw new VEOFatal("V2Signer", "openFile", 4, type + " '" + s + "' is a file not a directory");
         }
         if (!isDirectory && f.isDirectory()) {
-            throw new VEOFatal(type + " '" + s + "' is a directory not a file");
+            throw new VEOFatal("V2Signer", "openFile", 5, type + " '" + s + "' is a directory not a file");
         }
         if (verbose) {
             System.err.println(type + ": '" + s + "'");
